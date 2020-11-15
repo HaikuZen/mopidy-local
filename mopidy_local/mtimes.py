@@ -2,9 +2,11 @@ import pathlib
 import queue
 import stat
 import threading
+import logging
 
 from mopidy import exceptions
 
+logger = logging.getLogger(__name__)
 
 class FindError(exceptions.MopidyException):
     def __init__(self, message, errno=None):
@@ -33,7 +35,8 @@ def _find(root, thread_count=10, relative=False, follow=False):
     :param bool relative: if results should be relative to root or absolute
     :param bool follow: if symlinks should be followed
     """
-    root = pathlib.Path(root).resolve()
+    logger.info(f'root: {root.as_uri()}')
+    #root = pathlib.Path(root).resolve()
     threads = []
     results = {}
     errors = {}

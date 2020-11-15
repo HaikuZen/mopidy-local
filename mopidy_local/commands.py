@@ -53,6 +53,14 @@ class ScanCommand(commands.Command):
             help="Maximum number of tracks to scan",
         )
         self.add_argument(
+            "--subfolder",
+            action="store",
+            type=str,
+            dest="subfolder",
+            default=None,
+            help="subfolder to scan",
+        )        
+        self.add_argument(
             "--force",
             action="store_true",
             dest="force",
@@ -66,11 +74,13 @@ class ScanCommand(commands.Command):
 
         file_mtimes = self._find_files(
             media_dir=media_dir,
+            subfolder=args.subfolder,
             follow_symlinks=config["local"]["scan_follow_symlinks"],
         )
 
         files_to_update, files_in_library = self._check_tracks_in_library(
             media_dir=media_dir,
+            subfolder=args.subfolder,
             file_mtimes=file_mtimes,
             library=library,
             force_rescan=args.force,
@@ -105,15 +115,17 @@ class ScanCommand(commands.Command):
         library.close()
         return 0
 
-    def _find_files(self, *, media_dir, follow_symlinks):
-        logger.info(f"Finding files in {media_dir.as_uri()} ...")
-        file_mtimes, file_errors = mtimes.find_mtimes(media_dir, follow=follow_symlinks)
-        logger.info(f"Found {len(file_mtimes)} files in {media_dir.as_uri()}")
+    def _find_files(self, *, media_dir, subfolder, follow_symlinks):
+        logger.info(f'media_dir: {media_dir}')
+        _media_dir = media_dir.joinpath(subfolder) if subfolder else media_dir
+        logger.info(f"Finding files in {_media_dir.as_uri()} ...")
+        file_mtimes, file_errors = mtimes.find_mtimes(_media_dir, follow=follow_symlinks)
+        logger.info(f"Found {len(file_mtimes)} files in {_media_dir.as_uri()}")
 
         if file_errors:
             logger.warning(
                 f"Encountered {len(file_errors)} errors "
-                f"while finding files in {media_dir.as_uri()}"
+                f"while finding files in {_media_dir.as_uri()}"
             )
         for path in file_errors:
             logger.warning(f"Error for {path.as_uri()}: {file_errors[path]}")
@@ -121,7 +133,7 @@ class ScanCommand(commands.Command):
         return file_mtimes
 
     def _check_tracks_in_library(
-        self, *, media_dir, file_mtimes, library, force_rescan
+        self, *, media_dir, subfolder, file_mtimes, library, force_rescan
     ):
         num_tracks = library.load()
         logger.info(f"Checking {num_tracks} tracks from library")
@@ -129,14 +141,14 @@ class ScanCommand(commands.Command):
         uris_to_remove = set()
         files_to_update = set()
         files_in_library = set()
-
+        
         for track in library.begin():
             absolute_path = translator.local_uri_to_path(track.uri, media_dir)
             mtime = file_mtimes.get(absolute_path)
-            if mtime is None:
-                logger.debug(f"Removing {track.uri}: File not found")
+            if mtime is None and absolute_path.as_uri().find(subfolder) > -1:
+                logger.info(f"Removing {track.uri}: File not found ")
                 uris_to_remove.add(track.uri)
-            elif mtime > track.last_modified or force_rescan:
+            elif  mtime is not None and mtime > track.last_modified or force_rescan:
                 files_to_update.add(absolute_path)
             files_in_library.add(absolute_path)
 
